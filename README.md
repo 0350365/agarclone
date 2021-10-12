@@ -1,5 +1,5 @@
 # agarclone
-Simple remake of Agar.io using only JavaScript and HTML5's Canvas API (very WIP)
+Simple remake of Agar.io using only JavaScript and HTML5's Canvas API (**very WIP**)
 
 The number of cells that are rendered on screen is determined by the number of iterations of the for-loop on line 322 (default is 500);
 
