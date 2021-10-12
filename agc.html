@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>QuadTree</title>
+    <style>
+      body {
+        background-color: lightgray;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Create canvas
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth - 150;
+      canvas.height = window.innerHeight - 50;
+      canvas.style.backgroundColor = 'black';
+      canvas.style.display = 'block';
+      canvas.style.margin = 'auto';
+      document.body.appendChild(canvas);
+
+      // Returns a random integer bewteen min and max, inclusive
+      function randomIntFromInterval(min, max) {
+        return Math.random() * (max - min + 1) + min;
+      }
+
+      // Determines whether two cells are in contact
+      function collision(p1x, p1y, r1, p2x, p2y, r2) {
+        var a;
+        var x;
+        var y;
+
+        a = r1 + r2;
+        x = p1x - p2x;
+        y = p1y - p2y;
+
+        if (a > Math.sqrt(x * x + y * y)) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+
+      // Track mouse position, set variables for the distance between it and the player's cell
+      canvas.addEventListener('mousemove', mouse);
+      var Mousex = 0;
+      var Mousey = 0;
+      var deltaX, deltaY, deltaP;
+      function mouse(e) {
+        Mousex = e.clientX;
+        Mousey = e.clientY;
+      }
+
+      // Draws the cells
+      function render(x, y, r, c) {
+        if (r > 0) {
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, 2 * Math.PI);
+          //ctx.fillStyle = c;
+          ctx.strokeStyle = c;
+          ctx.stroke();
+        }
+      }
+
+      class cell {
+        constructor(x, y, r, c, vx, vy, type) {
+          this.x = x;
+          this.y = y;
+          this.r = r;
+          this.c = c;
+          this.vx = vx;
+          this.vy = vy;
+          this.type = type;
+        }
+
+        // Determines whether the cell is intersecting a rectangle
+        rectIntersect(rect) {
+          var xDist = Math.abs(this.x - rect.x);
+          var yDist = Math.abs(this.y - rect.y);
+          var cornerDist = (xDist - rect.w / 2) ** 2 + (yDist - rect.h / 2) ** 2;
+
+          if (xDist > rect.w / 2 + this.r || yDist > rect.h / 2 + this.r) {
+            return false;
+          }
+          if (xDist <= rect.w / 2 || yDist <= rect.h / 2) {
+            return true;
+          }
+          return cornerDist <= this.r ** 2;
+        }
+
+        // Not sure what this does
+
+        containsP(cell) {
+          const dX = this.x - cell.x;
+          const dY = this.y - cell.y;
+          var dist = Math.sqrt(dX ** 2 + dY ** 2);
+          return dist < this.r;
+        }
+
+        // Returns the area of the cell
+        area() {
+          return this.r * this.r * Math.PI;
+        }
+      }
+
+      class rectangle {
+        constructor(x, y, w, h) {
+          this.x = x;
+          this.y = y;
+          this.w = w;
+          this.h = h;
+        }
+
+        contains(cell) {
+          const x1 = this.x - this.w / 2;
+          const y1 = this.y + this.h / 2;
+          const x2 = this.x + this.w / 2;
+          const y2 = this.y - this.h / 2;
+          return cell.x >= x1 && cell.x <= x2 && cell.y >= y2 && cell.y <= y1;
+        }
+
+        area() {
+          return this.w * this.h;
+        }
+      }
+
+      class QuadTree {
+        constructor(bounds, cap) {
+          this.bounds = bounds;
+          this.cap = cap;
+          this.data = [];
+          this.food = [];
+          this.split = false;
+        }
+
+        insert(cell) {
+          if (!this.bounds.contains(cell) || cell.area() > this.bounds.area()) {
+            return 1;
+          }
+          if (this.data.length < this.cap) {
+            this.data.push(cell);
+          } else {
+            if (!this.split) {
+              const x = this.bounds.x;
+              const y = this.bounds.y;
+              const w = this.bounds.w;
+              const h = this.bounds.h;
+              this.split = true;
+              var nwBounds = new rectangle(x - w / 4, y - h / 4, w / 2, h / 2);
+              this.nw = new QuadTree(nwBounds, this.cap);
+
+              var neBounds = new rectangle(x + w / 4, y - h / 4, w / 2, h / 2);
+              this.ne = new QuadTree(neBounds, this.cap);
+
+              var swBounds = new rectangle(x - w / 4, y + h / 4, w / 2, h / 2);
+              this.sw = new QuadTree(swBounds, this.cap);
+
+              var seBounds = new rectangle(x + w / 4, y + h / 4, w / 2, h / 2);
+              this.se = new QuadTree(seBounds, this.cap);
+            }
+            var fails = 0;
+            fails += this.nw.insert(cell);
+            fails += this.ne.insert(cell);
+            fails += this.sw.insert(cell);
+            fails += this.se.insert(cell);
+            //console.log(fails);
+            if (fails === 4) {
+              this.data.push(cell);
+            }
+          }
+          return 0;
+        }
+        points() {
+          for (let i of this.data) {
+            render(i.x, i.y, i.r, i.c);
+          }
+          if (this.split) {
+            this.nw.points();
+            this.ne.points();
+            this.sw.points();
+            this.se.points();
+          }
+        }
+
+        /*
+        draw() {
+          ctx.strokeStyle = 'white';
+          if (this.data.length > 0) {
+            ctx.strokeRect(
+              this.bounds.x - this.bounds.w / 2,
+              this.bounds.y - this.bounds.h / 2,
+              this.bounds.w,
+              this.bounds.h
+            );
+          }
+          //console.log(this.bounds.x - this.bounds.w / 2, this.bounds.y - this.bounds.h / 2,
+                        this.bounds.x + this.bounds.w / 2, this.bounds.y + this.bounds.h / 2);
+          if (this.split) {
+            this.nw.draw();
+            this.ne.draw();
+            this.sw.draw();
+            this.se.draw();
+          }
+        }
+        */
+        getNear(cell, cellBound) {
+          var dots = this.data;
+          //render(cellBound.x, cellBound.y, cellBound.r, 'yellow')
+          if (!cellBound.rectIntersect(this.bounds) || cellBound == undefined) {
+            return;
+          }
+          if (this.split) {
+            this.nw.getNear(cell, cellBound);
+            this.ne.getNear(cell, cellBound);
+            this.sw.getNear(cell, cellBound);
+            this.se.getNear(cell, cellBound);
+          }
+          for (var i = 0; i < dots.length; ++i) {
+            if (cellBound.containsP(dots[i])) {
+              if (
+                dots[i] &&
+                collision(cell.x, cell.y, cell.r, dots[i].x, dots[i].y, dots[i].r)
+              ) {
+                if (cell.r > dots[i].r * 1.2) {
+                  cell.r += dots[i].r;
+                  dots.splice(i, 1);
+                } else if (dots[i].r > cell.r) {
+                  dots[i].r += cell.r;
+                  cell.r = 0;
+                }
+              }
+            }
+          }
+        }
+
+        update() {
+          //make cells move and bounce off the walls
+          var dots = this.data;
+          var sinVal, cosVal;
+          for (i = 0; i < this.data.length; ++i) {
+            dots[i].x += dots[i].vx * (1 / Math.log(dots[i].r));
+            dots[i].y += dots[i].vy * (1 / Math.log(dots[i].r));
+            if (dots[i].type === 0) {
+              deltaX = Mousex - dots[i].x - (window.innerWidth - canvas.width) / 2;
+              deltaY = Mousey - dots[i].y;
+              deltaP = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+              sinVal = deltaY / deltaP;
+              cosVal = deltaX / deltaP;
+              console.log(cosVal, sinVal);
+              dots[i].vx = cosVal * (100 / Math.log(dots[i].r));
+              dots[i].vy = sinVal * (100 / Math.log(dots[i].r));
+            }
+            /*
+            if (dots[i].r === 0) {
+              dots.splice(i, 1);
+            }
+            */
+
+            // TO OPTIMIZE: Boundary checks should only be done in quadrants that are against the edges of the canvas
+            if (dots[i]) {
+              if (
+                dots[i].x + dots[i].r >= canvas.width ||
+                dots[i].x - dots[i].r <= 0
+              ) {
+                dots[i].vx = -dots[i].vx;
+              }
+              if (
+                dots[i].y + dots[i].r >= canvas.height ||
+                dots[i].y - dots[i].r <= 0
+              ) {
+                dots[i].vy = -dots[i].vy;
+              }
+
+              var bounds = new cell(
+                dots[i].x,
+                dots[i].y,
+                2 * dots[i].r,
+                'black',
+                0,
+                0
+              );
+              this.getNear(dots[i], bounds);
+            }
+
+            //if cell is outside bounds of quadrant or is larger than it, remove it and reinsert it into correct one
+            if (
+              dots[i] &&
+              (!this.bounds.contains(dots[i]) || dots[i].area() > this.bounds.area())
+            ) {
+              const temp = dots[i];
+              this.data.splice(i, 1);
+              qt.insert(temp);
+            }
+          }
+          // recurse
+          if (this.split) {
+            this.nw.update();
+            this.ne.update();
+            this.sw.update();
+            this.se.update();
+          }
+          this.points();
+          //this.draw();
+        }
+      }
+
+      var r = new rectangle(
+        canvas.width / 2,
+        canvas.height / 2,
+        canvas.width,
+        canvas.height
+      );
+
+      // Create quadtree that can hold 10 cells per quadrant
+      var qt = new QuadTree(r, 10);
+
+      // Player
+      qt.insert(new cell(500, 500, 10, 'red', 0, 0, 0));
+
+      var radius = 10;
+      for (i = 0; i < 0; i++) {
+        //randomIntFromInterval(r.x - r.w / 2 + radius, r.x + r.w / 2 - radius);
+        //randomIntFromInterval(r.y - r.h / 2 + radius, r.y + r.h / 2 - radius);
+        var x = randomIntFromInterval(
+          r.x - r.w / 2 + radius,
+          r.x + r.w / 2 - radius
+        );
+        var y = randomIntFromInterval(
+          r.y - r.h / 2 + radius,
+          r.y + r.h / 2 - radius
+        );
+        var rd = randomIntFromInterval(1, 2);
+        var vx = randomIntFromInterval(-1, 1);
+        var vy = randomIntFromInterval(-1, 1);
+        if (vx == 0) {
+          vx = -0.5;
+        }
+        if (vy == 0) {
+          vx = Math.pi;
+        }
+        qt.insert(new cell(x, y, rd, 'purple', vx, vy, 1));
+      }
+
+      qt.points();
+      //console.log(qt);
+
+      // display fps
+      var before, now, fps;
+      before = Date.now();
+      fps = 0;
+
+      // main game loop
+      function game() {
+        now = Date.now();
+        fps = Math.round(1000 / (now - before));
+        before = now;
+        requestAnimationFrame(game);
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        qt.update();
+        ctx.font = '15px Arial';
+        ctx.fillStyle = 'white';
+        ctx.fillText('FPS: ' + fps, 20, 20);
+      }
+      game();
+    </script>
+  </body>
+</html>
